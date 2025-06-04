@@ -1,0 +1,149 @@
+/* Import Google Fonts first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Then Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom component classes */
+@layer components {
+  .address-monospace {
+    @apply font-mono text-sm;
+  }
+  
+  .section-title {
+    @apply text-2xl font-semibold text-gray-800 pb-2 mb-6 border-b-2 border-blue-500;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-200 hover:shadow-xl;
+  }
+  
+  .card-header {
+    @apply bg-gradient-to-r from-blue-600 to-blue-500 text-white p-6 font-semibold text-lg;
+  }
+  
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4;
+    animation: fadeIn 0.2s ease-out;
+  }
+  
+  .modal-container {
+    @apply bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col z-[10000];
+    transform: translateY(0);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .modal-header {
+    @apply px-6 py-4 border-b border-gray-100 flex justify-between items-center;
+  }
+  
+  .modal-title {
+    @apply text-xl font-semibold text-gray-800;
+  }
+  
+  .modal-body {
+    @apply p-6 overflow-y-auto flex-1;
+  }
+  
+  .modal-footer {
+    @apply px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3;
+  }
+  
+  .form-group {
+    @apply mb-5;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1.5;
+  }
+  
+  .form-control {
+    @apply w-full px-4 py-2.5 text-sm text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200;
+  }
+  
+  .form-control:disabled {
+    @apply bg-gray-50 cursor-not-allowed;
+  }
+  
+  .btn {
+    @apply px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 focus:ring-offset-blue-100;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500 focus:ring-offset-gray-100;
+  }
+  
+  .btn-outline-primary {
+    @apply border border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500 focus:ring-offset-blue-100;
+  }
+  
+  .alert {
+    @apply p-4 mb-6 rounded-lg text-sm;
+  }
+  
+  .alert-danger {
+    @apply bg-red-50 text-red-700 border-l-4 border-red-500;
+  }
+  
+  .alert-success {
+    @apply bg-green-50 text-green-700 border-l-4 border-green-500;
+  }
+  
+  .alert-info {
+    @apply bg-blue-50 text-blue-700 border-l-4 border-blue-500;
+  }
+  
+  .input-group {
+    @apply flex;
+  }
+  
+  .input-group-append {
+    @apply -ml-px;
+  }
+  
+  .close-button {
+    @apply text-gray-400 hover:text-gray-500 text-2xl leading-none p-1 -mr-1 focus:outline-none;
+  }
+  
+  .address-dropdown {
+    @apply absolute z-10 mt-1 w-full bg-white shadow-lg rounded-lg border border-gray-200 max-h-60 overflow-auto;
+  }
+  
+  .dropdown-header {
+    @apply px-4 py-2 bg-gray-50 border-b border-gray-100 text-sm font-medium text-gray-500;
+  }
+  
+  .dropdown-item {
+    @apply px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer;
+  }
+  
+  .dropdown-items-container {
+    @apply max-h-48 overflow-y-auto;
+  }
+}
+
+/* Custom animations */
+@layer utilities {
+  .fade-in {
+    animation: fadeIn 0.3s ease-in;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
