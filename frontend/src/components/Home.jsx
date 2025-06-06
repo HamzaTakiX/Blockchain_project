@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import contractService from '../services/contractService';
 import AddDiplomaModal from './AddDiplomaModal';
+import SearchDiplomas from './SearchDiplomas';
+import UserDiplomas from './UserDiplomas';
 
 const Home = () => {
   const [totalDiplomas, setTotalDiplomas] = useState(0);
@@ -159,7 +161,7 @@ const Home = () => {
     };
   }, []); // Empty dependency array: runs once on mount and after page reloads triggered by accountsChanged.
   
-  // Fonction pour récupérer les diplômes de l'utilisateur connecté et tous les diplômes avec la même adresse étudiant (studentName)
+  // Fonction pour récupérer uniquement les diplômes de l'utilisateur connecté
   const fetchUserDiplomas = async (address) => {
     if (!address) {
       console.log("fetchUserDiplomas: No address provided, returning.");
@@ -169,69 +171,33 @@ const Home = () => {
     console.log(`fetchUserDiplomas: Called for address ${address}`);
     setIsLoadingUserDiplomas(true);
     setUserDiplomas([]); // Reset diplomas array to ensure we don't show stale data
+    
     try {
-      // Check if the connected user is an admin
-      const isUserAdmin = await contractService.isAdmin();
-      
-      const allBlockchainAddresses = await contractService.getAllStudentAddresses();
-      console.log(`fetchUserDiplomas: Found ${allBlockchainAddresses.length} addresses on the blockchain.`);
       const matchingDiplomas = [];
       
-      let primaryUserStudentName = null;
+      // 1. Vérifier et récupérer uniquement le diplôme de l'adresse connectée
+      console.log(`fetchUserDiplomas: Checking for diploma at address ${address}`);
+      const diplomaExists = await contractService.verifyDiploma(address);
       
-      // 1. Fetch diploma for the connected address (primary diploma)
-      console.log(`fetchUserDiplomas: Checking for primary diploma at address ${address}`);
-      const primaryDiplomaExists = await contractService.verifyDiploma(address);
-      
-      // Display the diploma if it exists for the connected address
-      if (primaryDiplomaExists) {
-        console.log(`fetchUserDiplomas: Primary diploma verified for address ${address}. Fetching details.`);
-        const primaryDiplomaData = await contractService.getDiploma(address);
-        if (primaryDiplomaData && primaryDiplomaData.studentName) {
-          primaryUserStudentName = primaryDiplomaData.studentName;
+      if (diplomaExists) {
+        console.log(`fetchUserDiplomas: Diploma verified for address ${address}. Fetching details.`);
+        const diplomaData = await contractService.getDiploma(address);
+        
+        if (diplomaData && diplomaData.studentName) {
           matchingDiplomas.push({
-            studentName: primaryDiplomaData.studentName,
-            specialization: primaryDiplomaData.specialization,
-            issueDate: primaryDiplomaData.issueDate.getTime(),
-            ipfsHash: primaryDiplomaData.ipfsHash,
-            isValid: primaryDiplomaData.isValid,
-            studentAddress: address 
+            studentName: diplomaData.studentName,
+            specialization: diplomaData.specialization,
+            issueDate: diplomaData.issueDate.getTime(),
+            ipfsHash: diplomaData.ipfsHash,
+            isValid: diplomaData.isValid,
+            studentAddress: address
           });
-          console.log(`fetchUserDiplomas: Added primary diploma for ${address}. Student Name: ${primaryUserStudentName}`);
+          console.log(`fetchUserDiplomas: Added diploma for ${address}.`);
         } else {
-          console.warn(`fetchUserDiplomas: Primary diploma for ${address} verified, but getDiploma returned no data or no studentName.`);
+          console.warn(`fetchUserDiplomas: Diploma for ${address} verified, but getDiploma returned no data or no studentName.`);
         }
       } else {
-        console.log(`fetchUserDiplomas: No primary diploma found for connected address ${address} via verifyDiploma.`);
-      }
-      
-      // 2. If a primary student name was found, search for other diplomas with the same student name
-      if (primaryUserStudentName) {
-        console.log(`fetchUserDiplomas: Searching for other diplomas with student name: ${primaryUserStudentName}`);
-        for (const otherEthAddress of allBlockchainAddresses) {
-          // Skip the primary address as it's already added
-          if (otherEthAddress.toLowerCase() === address.toLowerCase()) continue;
-          
-          // console.log(`fetchUserDiplomas: Checking other address ${otherEthAddress} for matching student name.`);
-          const otherDiplomaExists = await contractService.verifyDiploma(otherEthAddress);
-          if (otherDiplomaExists) {
-            const otherDiplomaData = await contractService.getDiploma(otherEthAddress);
-            if (otherDiplomaData && otherDiplomaData.studentName && 
-                otherDiplomaData.studentName.toLowerCase() === primaryUserStudentName.toLowerCase()) {
-              matchingDiplomas.push({
-                studentName: otherDiplomaData.studentName,
-                specialization: otherDiplomaData.specialization,
-                issueDate: otherDiplomaData.issueDate.getTime(),
-                ipfsHash: otherDiplomaData.ipfsHash,
-                isValid: otherDiplomaData.isValid,
-                studentAddress: otherEthAddress
-              });
-              console.log(`fetchUserDiplomas: Added related diploma from ${otherEthAddress} with matching student name.`);
-            }
-          }
-        }
-      } else {
-        console.log(`fetchUserDiplomas: Not searching for related diplomas as primary student name was not found for ${address} or user is not admin.`);
+        console.log(`fetchUserDiplomas: No diploma found for connected address ${address}.`);
       }
       
       console.log(`fetchUserDiplomas: Total of ${matchingDiplomas.length} diplomas found for user ${address}.`);
@@ -485,13 +451,22 @@ const Home = () => {
             Sécurisez, vérifiez et partagez des diplômes de manière infalsifiable grâce à la technologie blockchain.
           </p>
           
-          <div className="mt-8 flex justify-center space-x-6">
-            <button 
-              onClick={() => setIsAddModalOpen(true)}
-              className="bg-white text-blue-700 hover:bg-blue-50 px-8 py-3.5 rounded-lg font-medium text-lg transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 min-w-[180px] text-center cursor-pointer"
-            >
-              Ajouter diplome
-            </button>
+          <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4 sm:gap-6 max-w-2xl mx-auto">
+            {isAdmin && (
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="group relative overflow-hidden px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 min-w-[200px] text-center cursor-pointer bg-white text-blue-700 hover:bg-blue-50"
+              >
+                <span className="relative z-10 flex items-center justify-center">
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                  </svg>
+                  Ajouter un diplôme
+                </span>
+                <span className="absolute inset-0 bg-gradient-to-r from-blue-100 to-indigo-100 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
+              </button>
+            )}
+            
             <a 
               href="#search-section"
               onClick={(e) => {
@@ -501,11 +476,18 @@ const Home = () => {
                   searchSection.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
-              className="bg-transparent text-white border-2 border-white hover:bg-white hover:text-blue-700 px-8 py-3.5 rounded-lg font-medium text-lg transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-1 min-w-[180px] text-center cursor-pointer"
+              className="group relative overflow-hidden px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 min-w-[200px] text-center cursor-pointer bg-transparent border-2 border-white text-white hover:bg-white/10 backdrop-blur-sm"
             >
-              Vérifier un diplôme
+              <span className="relative z-10 flex items-center justify-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                Vérifier un diplôme
+              </span>
+              <span className="absolute inset-0 bg-gradient-to-r from-white/10 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
             </a>
           </div>
+          
           
           {/* Add Diploma Modal */}
           <AddDiplomaModal 
@@ -678,177 +660,36 @@ const Home = () => {
         </div>
       </div>
 
-      <div id="search-section" className="bg-white shadow-lg rounded-lg p-6 mb-8 mt-12">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-3">Rechercher des Diplômes</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Recherchez les diplômes dans la blockchain en utilisant l'adresse Ethereum de l'étudiant
-          </p>
-        </div>
-        
-        <div className="mt-6">
-          <div className="flex justify-center">
-            <div className="w-full max-w-2xl">
-              <div className="flex rounded-lg shadow-sm overflow-hidden">
-              <input 
-                    type="text" 
-                    className={`flex-1 block w-full rounded-l-lg border ${
-                      searchAddress ? 'border-blue-500' : 'border-gray-300'
-                    } hover:border-blue-400 focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none py-3 px-4 text-sm text-gray-800 placeholder-gray-400 transition-all duration-200`} 
-                    placeholder="Entrez l'adresse Ethereum de l'étudiant" 
-                    value={searchAddress}
-                    onChange={(e) => setSearchAddress(e.target.value)}
-                  />
-                <button 
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-r-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-300" 
-                  type="button" 
-                  onClick={searchDiploma}
-                  disabled={isSearching}
-                >
-                  {isSearching ? 'Recherche...' : 'Rechercher'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {searchError && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mt-4 mx-auto max-w-2xl rounded">
-            <p className="text-red-700">{searchError}</p>
-          </div>
+      {/* Search Diplomas Section */}
+      <SearchDiplomas
+        searchAddress={searchAddress}
+        setSearchAddress={setSearchAddress}
+        searchDiploma={searchDiploma}
+        isSearching={isSearching}
+        searchError={searchError}
+        diplomaFound={diplomaFound}
+        diplomaData={diplomaData}
+        onClearSearch={() => {
+          setDiplomaFound(false);
+          setDiplomaData(null);
+          setSearchError('');
+        }}
+      />
+      
+      {/* User Diplomas Section */}
+      <UserDiplomas
+        connectedAddress={connectedAddress}
+        userDiplomas={userDiplomas}
+        isLoadingUserDiplomas={isLoadingUserDiplomas}
+      />
+      
+      {/* Admin Actions */}
+      <div className="flex justify-center gap-4 mt-8">
+        {isAdmin && (
+          <a href="#add" className="border-2 border-blue-600 text-blue-600 hover:bg-blue-50 px-6 py-2 rounded-md font-medium text-lg transition duration-300">
+            Ajouter un Diplôme
+          </a>
         )}
-        
-        {diplomaFound && (
-          <div className="bg-white shadow-md rounded-lg p-6 mt-8 mx-auto max-w-3xl">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Diplôme trouvé</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="text-left">
-                <p className="mb-2"><span className="font-medium text-gray-700">Nom de l'étudiant:</span> {diplomaData.studentName}</p>
-                <p className="mb-2"><span className="font-medium text-gray-700">Spécialité:</span> {diplomaData.specialization}</p>
-                <p className="mb-2"><span className="font-medium text-gray-700">Date d'émission:</span> {new Date(parseInt(diplomaData.issueDate) * 1000).toLocaleDateString()}</p>
-                <p className="mb-2"><span className="font-medium text-gray-700">Statut:</span> {diplomaData.isValid ? 
-                  <span className="text-green-600 font-medium">Valide</span> : 
-                  <span className="text-red-600 font-medium">Révoqué</span>}
-                </p>
-              </div>
-              <div className="text-left">
-                <p className="mb-2"><span className="font-medium text-gray-700">Adresse de l'étudiant:</span> <span className="font-mono text-sm">{searchAddress}</span></p>
-                <p className="mb-2">
-                  <span className="font-medium text-gray-700">Document:</span> 
-                  <a 
-                    href={`https://ipfs.io/ipfs/${diplomaData.ipfsHash}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="inline-flex items-center ml-2 px-3 py-1 border border-blue-500 text-blue-500 hover:bg-blue-50 rounded text-sm transition duration-300"
-                  >
-                    Voir le document <i className="bi bi-box-arrow-up-right ml-1"></i>
-                  </a>
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Section des diplômes de l'utilisateur connecté */}
-        {connectedAddress && console.log('Home render: Connected address exists:', connectedAddress, 'userDiplomas:', userDiplomas)}
-        {connectedAddress && userDiplomas.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Vos Diplômes</h2>
-            <p className="text-lg text-gray-600 mb-6">Votre compte (<span className="font-mono">{connectedAddress.substring(0, 6)}...{connectedAddress.substring(connectedAddress.length - 4)}</span>) possède {userDiplomas.length} diplôme(s) certifié(s)</p>
-            
-            {isLoadingUserDiplomas ? (
-              <div className="text-center py-8">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent" role="status">
-                  <span className="sr-only">Chargement...</span>
-                </div>
-                <p className="mt-2 text-gray-600">Chargement de vos diplômes...</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {userDiplomas.map((diploma, index) => (
-                  <div className="w-full mb-6" key={index}>
-                    <div className="border border-blue-500 rounded-lg shadow-md overflow-hidden">
-                      <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center">
-                        <h5 className="text-lg font-medium">{diploma.specialization}</h5>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${diploma.isValid ? 'bg-green-500' : 'bg-red-500'}`}>
-                          {diploma.isValid ? 'Valide' : 'Révoqué'}
-                        </span>
-                      </div>
-                      <div className="p-4 bg-white">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="col-span-2">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <p className="mb-2"><span className="font-medium text-gray-700">Nom:</span> {diploma.studentName}</p>
-                                <p className="mb-2"><span className="font-medium text-gray-700">Date d'émission:</span> {new Date(parseInt(diploma.issueDate) * 1000).toLocaleDateString()}</p>
-                                <p className="mb-2"><span className="font-medium text-gray-700">Adresse étudiant:</span> <span className="text-gray-500 font-mono text-sm">{diploma.studentAddress.substring(0, 6)}...{diploma.studentAddress.substring(diploma.studentAddress.length - 4)}</span></p>
-                              </div>
-                              <div>
-                                <p className="mb-2"><span className="font-medium text-gray-700">IPFS Hash:</span> <span className="text-gray-500 font-mono text-sm">{diploma.ipfsHash.substring(0, 6)}...{diploma.ipfsHash.substring(diploma.ipfsHash.length - 4)}</span></p>
-                                <p className="mb-2"><span className="font-medium text-gray-700">Statut:</span> <span className={diploma.isValid ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{diploma.isValid ? 'Valide' : 'Révoqué'}</span></p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-center">
-                            <a 
-                              href={`https://ipfs.io/ipfs/${diploma.ipfsHash}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition duration-300 inline-flex items-center"
-                            >
-                              <i className="bi bi-download mr-2"></i> Télécharger le diplôme
-                            </a>
-                          </div>
-                        </div>
-                        <div className="mt-4 border-t pt-4">
-                          <div className="flex justify-end space-x-3">
-                            <a 
-                              href={`https://ipfs.io/ipfs/${diploma.ipfsHash}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1 rounded text-sm transition duration-300 inline-flex items-center"
-                            >
-                              <i className="bi bi-eye mr-1"></i> Voir le document
-                            </a>
-                            <button 
-                              className="border border-blue-300 hover:bg-blue-50 text-blue-600 px-3 py-1 rounded text-sm transition duration-300 inline-flex items-center"
-                              onClick={() => window.open(`https://etherscan.io/address/${diploma.studentAddress}`, '_blank')}
-                            >
-                              <i className="bi bi-link-45deg mr-1"></i> Voir sur Etherscan
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Afficher un message si l'utilisateur est connecté mais n'a pas de diplômes */}
-        {connectedAddress && userDiplomas.length === 0 && !isLoadingUserDiplomas && (
-          <div className="bg-white shadow-lg rounded-lg p-6 mb-8 mt-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Vos Diplômes</h2>
-            <p className="text-gray-600 mb-6">Votre compte (<span className="font-mono bg-gray-100 px-2 py-1 rounded">{connectedAddress.substring(0, 6)}...{connectedAddress.substring(connectedAddress.length - 4)}</span>) n'a pas encore de diplômes certifiés.</p>
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-              <p className="text-blue-800 font-medium mb-2">Si vous pensez que c'est une erreur, veuillez vérifier que :</p>
-              <ul className="list-disc list-inside text-blue-700 space-y-1">
-                <li>Vous êtes connecté avec le bon compte Ethereum</li>
-                <li>Vos diplômes ont bien été ajoutés à la blockchain</li>
-              </ul>
-            </div>
-          </div>
-        )}
-        
-        <div className="flex justify-center gap-4 mt-8">
-          {isAdmin && (
-            <a href="#add" className="border-2 border-blue-600 text-blue-600 hover:bg-blue-50 px-6 py-2 rounded-md font-medium text-lg transition duration-300">
-              Ajouter un Diplôme
-            </a>
-          )}
-        </div>
       </div>
     </div>
   );

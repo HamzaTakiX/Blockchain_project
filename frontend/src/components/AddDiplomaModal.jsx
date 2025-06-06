@@ -233,12 +233,13 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
         content: 'Enregistrement du diplôme sur la blockchain...'
       });
       
-      // Ajouter le diplôme au contrat
+      // Ajouter le diplôme au contrat avec la date de délivrance
       await contractService.addDiploma(
         formData.studentAddress,
         formData.studentName,
         formData.specialization,
-        metadataHash
+        metadataHash,
+        formData.issueDate // Pass the issue date to the contract service
       );
       
       // Réinitialiser le formulaire

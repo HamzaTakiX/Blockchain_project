@@ -14,49 +14,6 @@ class ContractService {
   }
 
   /**
-   * Vérifie si l'adresse connectée est l'admin du contrat
-   * @returns {Promise<{isAdmin: boolean, address: string, adminAddress: string, isAdminFunctionAvailable: boolean}>} - Objet contenant le statut admin et l'adresse
-   */
-  async checkAdminStatus() {
-    if (!this.contract) {
-      throw new Error('Contract not initialized. Call init() first.');
-    }
-    
-    try {
-      // Récupérer l'adresse connectée
-      const address = await this.signer.getAddress();
-      let adminAddress = null;
-      let isAdmin = false;
-      let isAdminFunctionAvailable = true;
-      
-      try {
-        // Essayer d'appeler la fonction admin() si elle existe
-        adminAddress = await this.contract.admin();
-        // Si on arrive ici, la fonction existe et a répondu
-        isAdmin = address.toLowerCase() === adminAddress.toLowerCase();
-      } catch (error) {
-        // Si la fonction n'existe pas ou échoue, on considère que l'utilisateur n'est pas admin
-        console.warn('La fonction admin() n\'est pas disponible dans le contrat. Vérifiez que le contrat est correctement déployé.');
-        isAdminFunctionAvailable = false;
-        adminAddress = 'Non disponible';
-        isAdmin = false;
-      }
-      
-      console.log(`Vérification du statut admin - Connecté: ${address}, Admin: ${adminAddress}, Est Admin: ${isAdmin}`);
-      
-      return {
-        isAdmin,
-        address,
-        adminAddress,
-        isAdminFunctionAvailable
-      };
-    } catch (error) {
-      console.error('Erreur lors de la vérification du statut admin:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Initialise la connexion avec le contrat
    * @returns {Promise<boolean>} - True si l'initialisation a réussi
    */
@@ -95,16 +52,6 @@ class ContractService {
         }
         const signerAddress = await this.signer.getAddress();
         console.log("Adresse du signer (premier compte du noeud local):", signerAddress);
-        
-        // Initialiser le contrat avec l'ABI et l'adresse
-        this.contract = new ethers.Contract(
-          contractAddress.DiplomaCert,  // Adresse du contrat déployé
-          DiplomaCertArtifact.abi,      // ABI du contrat
-          this.signer                   // Le signer (compte connecté)
-        );
-        
-        console.log("Contrat initialisé avec l'adresse:", contractAddress.DiplomaCert);
-        this.initialized = true;
       } catch (directProviderError) {
         console.error("Erreur lors de la connexion directe au noeud local:", directProviderError);
         
