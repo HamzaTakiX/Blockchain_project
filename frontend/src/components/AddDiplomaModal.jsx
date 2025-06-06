@@ -8,7 +8,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
     studentName: '',
     studentAddress: '',
     specialization: '',
-    issueDate: new Date().toISOString().split('T')[0], // Format date as YYYY-MM-DD
+    issueDate: '', // Laissé vide initialement pour forcer la sélection d'une date
   });
   const [file, setFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,13 +53,52 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
     }
   };
   
+  // Log when component mounts/updates
+  useEffect(() => {
+    console.log('AddDiplomaModal - Current formData:', formData);
+    console.log('AddDiplomaModal - Current issueDate:', formData.issueDate);
+    console.log('AddDiplomaModal - Type of issueDate:', typeof formData.issueDate);
+    
+    if (formData.issueDate) {
+      const date = new Date(formData.issueDate);
+      console.log('AddDiplomaModal - Parsed date object:', date);
+      console.log('AddDiplomaModal - Is valid date:', !isNaN(date.getTime()));
+      console.log('AddDiplomaModal - Formatted date (fr-FR):', 
+        date.toLocaleDateString('fr-FR', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric'
+        })
+      );
+    }
+  }, [formData]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    console.log(`Field changed - ${name}:`, value);
     
-    // Reset verification status when student address changes
-    if (name === 'studentAddress') {
-      setIsAddressVerified(false);
+    // Handle date input specifically to ensure proper formatting
+    if (name === 'issueDate') {
+      console.log('Date selected (raw input):', value);
+      setFormData(prev => {
+        const newData = {
+          ...prev,
+          [name]: value
+        };
+        console.log('Updated formData with new date:', newData);
+        return newData;
+      });
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+      
+      // Reset verification status when student address changes
+      if (name === 'studentAddress') {
+        console.log('Student address changed, resetting verification');
+        setIsAddressVerified(false);
+      }
     }
   };
   
@@ -194,34 +233,73 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
         console.log('Utilisation d\'un hash de développement:', fileHash);
       }
       
-      // Mettre à jour le message
-      setMessage({
-        type: 'info',
-        content: 'Préparation des métadonnées du diplôme...'
-      });
-      
-      // Créer les métadonnées du diplôme
+      // Créer les métadonnées du diplôme avant de les envoyer à IPFS
       const fileURL = ipfsService.getIPFSGatewayURL(fileHash);
+      
+      // Log the date before creating metadata
+      console.log('Creating metadata - Raw issueDate from form:', formData.issueDate);
+      
+      // Ensure the date is in YYYY-MM-DD format and consistent
+      let issueDate = formData.issueDate;
+      if (issueDate) {
+        // If it's a full ISO string, extract just the date part
+        if (issueDate.includes('T')) {
+          issueDate = issueDate.split('T')[0];
+        }
+        // Ensure it's in YYYY-MM-DD format
+        const dateObj = new Date(issueDate);
+        if (!isNaN(dateObj.getTime())) {
+          // Format as YYYY-MM-DD
+          issueDate = dateObj.toISOString().split('T')[0];
+        } else {
+          // Fallback to current date if invalid
+          console.warn('Invalid date, falling back to current date');
+          issueDate = new Date().toISOString().split('T')[0];
+        }
+      } else {
+        // If no date provided, use current date
+        issueDate = new Date().toISOString().split('T')[0];
+      }
+      
+      console.log('Final formatted issueDate for metadata:', issueDate);
+      
       const metadata = {
         studentName: formData.studentName,
         studentAddress: formData.studentAddress,
         specialization: formData.specialization,
-        issueDate: formData.issueDate,
+        issueDate: issueDate, // This is now guaranteed to be in YYYY-MM-DD format
         fileHash: fileHash,
-        fileURL: fileURL,  // Add direct IPFS gateway URL for easy access
+        fileURL: fileURL,
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
         issuerAddress: window.ethereum?.selectedAddress || '0x0000000000000000000000000000000000000000',
-        issuerName: "Université XYZ",  // This should be configurable
+        issuerName: "Université XYZ",
         timestamp: Date.now()
       };
       
+      console.log('Metadata to be uploaded to IPFS:', JSON.stringify(metadata, null, 2));
+      
+      // Mettre à jour le message
+      setMessage({
+        type: 'info',
+        content: 'Téléchargement des métadonnées sur IPFS en cours...'
+      });
+
       // Télécharger les métadonnées sur IPFS
       let metadataHash;
       try {
+        console.log('Uploading metadata to IPFS...');
         metadataHash = await ipfsService.uploadJSONToIPFS(metadata);
         console.log('Métadonnées téléchargées sur IPFS avec le hash:', metadataHash);
+        console.log('Full metadata that was uploaded to IPFS:', {
+          ...metadata,
+          _debug: {
+            issueDateType: typeof metadata.issueDate,
+            issueDateValue: metadata.issueDate,
+            timestamp: new Date().toISOString()
+          }
+        });
       } catch (ipfsError) {
         console.error('Erreur lors du téléchargement des métadonnées sur IPFS:', ipfsError);
         // En cas d'erreur, utiliser un hash de développement pour continuer
@@ -235,21 +313,22 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
         content: 'Enregistrement du diplôme sur la blockchain...'
       });
       
-      // Ajouter le diplôme au contrat avec la date de délivrance
+      // Les métadonnées ont déjà été créées plus tôt dans le flux
+      
+      // Ajouter le diplôme au contrat
       await contractService.addDiploma(
         formData.studentAddress,
         formData.studentName,
         formData.specialization,
-        metadataHash,
-        formData.issueDate // Pass the issue date to the contract service
+        metadataHash
       );
       
-      // Réinitialiser le formulaire
+      // Reset form but keep the selected date
       setFormData({
         studentName: '',
         studentAddress: '',
         specialization: '',
-        issueDate: new Date().toISOString().split('T')[0],
+        issueDate: formData.issueDate, // Keep the selected date
       });
       setFile(null);
       
@@ -528,26 +607,29 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
 
             
             {/* Issue Date */}
-            <div>
-              <label htmlFor="issueDate" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Date de délivrance
+            <div className="mb-4">
+              <label htmlFor="issueDate" className="block text-sm font-medium text-gray-700 mb-1">
+                Date d'émission <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  id="issueDate"
-                  name="issueDate"
-                  value={formData.issueDate}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
+              <input
+                type="date"
+                id="issueDate"
+                name="issueDate"
+                value={formData.issueDate}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
+                required
+                max={new Date().toISOString().split('T')[0]} // Prevent future dates
+              />
+              {formData.issueDate && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Date sélectionnée : {new Date(formData.issueDate).toLocaleDateString('fr-FR', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
+                </p>
+              )}
             </div>
             
             {/* File Upload */}

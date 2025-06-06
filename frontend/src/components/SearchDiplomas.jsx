@@ -201,12 +201,69 @@ const SearchDiplomas = ({
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Date d'Émission</p>
-                    <p className="font-medium text-gray-900">
-                      {new Date(Number(diplomaData.issueDate)).toLocaleDateString('fr-FR', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
+                    <p className="font-medium text-gray-900" data-testid="search-diploma-date">
+                      {(() => {
+                        try {
+                          console.group('=== SEARCH DIPLOMA DATE DEBUG ===');
+                          
+                          // Get the raw date from metadata or diploma data
+                          const rawDate = (diplomaData.metadata && diplomaData.metadata.issueDate) || diplomaData.issueDate;
+                          console.log('Raw date from data:', rawDate);
+                          
+                          if (!rawDate) {
+                            console.warn('No date found in diploma data');
+                            console.groupEnd();
+                            return 'Date non disponible';
+                          }
+                          
+                          // Parse the date - handle both YYYY-MM-DD and timestamps
+                          let parsedDate;
+                          if (typeof rawDate === 'string') {
+                            // If it's just a date string (YYYY-MM-DD), add timezone info
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+                              parsedDate = new Date(`${rawDate}T00:00:00Z`);
+                              console.log('Parsed as YYYY-MM-DD date');
+                            } else {
+                              // Try to parse as ISO string
+                              parsedDate = new Date(rawDate);
+                              console.log('Parsed as ISO string');
+                            }
+                          } else if (typeof rawDate === 'number') {
+                            // Handle timestamp (in seconds or milliseconds)
+                            parsedDate = new Date(rawDate * (rawDate < 1e10 ? 1000 : 1));
+                            console.log('Parsed as timestamp');
+                          } else {
+                            // Fallback to current date if format is unknown
+                            console.warn('Unknown date format, using current date');
+                            parsedDate = new Date();
+                          }
+                          
+                          // Validate the parsed date
+                          if (isNaN(parsedDate.getTime())) {
+                            console.error('Invalid date after parsing:', rawDate);
+                            console.groupEnd();
+                            return 'Date non valide';
+                          }
+                          
+                          // Format the date in French locale
+                          const formattedDate = new Intl.DateTimeFormat('fr-FR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            timeZone: 'UTC' // Force UTC to prevent timezone issues
+                          }).format(parsedDate);
+                          
+                          console.log('Parsed date:', parsedDate.toISOString());
+                          console.log('Formatted date (fr-FR):', formattedDate);
+                          console.groupEnd();
+                          
+                          return formattedDate;
+                        } catch (e) {
+                          console.error('Error formatting date (search):', e);
+                          console.groupEnd();
+                          return 'Date non disponible';
+                        }
+                      })()}
                     </p>
                   </div>
                 </div>

@@ -157,7 +157,55 @@ const UserDiplomas = ({
                           </div>
                           <div className="bg-gray-50 p-3 rounded-lg">
                             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Date d'émission</p>
-                            <p className="text-gray-900">{new Date(Number(diploma.issueDate)).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                            <p className="text-gray-900" data-testid="diploma-date">
+                            {(() => {
+                              try {
+                                // Check metadata first, then fall back to diploma.issueDate
+                                let issueDate = (diploma.metadata && diploma.metadata.issueDate) || diploma.issueDate;
+                                
+                                console.group('Date Debug - Diploma ' + index);
+                                console.log('Raw metadata date:', diploma.metadata?.issueDate);
+                                console.log('Raw diploma date:', diploma.issueDate);
+                                console.log('Using date:', issueDate);
+
+                                if (!issueDate) {
+                                  console.warn('No date found in metadata or diploma');
+                                  console.groupEnd();
+                                  return 'Date non disponible';
+                                }
+
+                                // If the date is a string in YYYY-MM-DD format, add timezone info
+                                if (typeof issueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+                                  issueDate += 'T00:00:00.000Z'; // Add timezone info for consistent parsing
+                                }
+
+                                const date = new Date(issueDate);
+                                
+                                if (isNaN(date.getTime())) {
+                                  console.error('Invalid date format:', issueDate);
+                                  console.groupEnd();
+                                  return 'Date non valide';
+                                }
+
+                                // Format date in French locale
+                                const formattedDate = new Intl.DateTimeFormat('fr-FR', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  timeZone: 'UTC' // Force UTC to avoid timezone issues
+                                }).format(date);
+
+                                console.log('Formatted date (fr-FR):', formattedDate);
+                                console.groupEnd();
+                                
+                                return formattedDate;
+                              } catch (e) {
+                                console.error('Erreur formatage date:', e);
+                                console.groupEnd();
+                                return 'Date non disponible';
+                              }
+                            })()}
+                            </p>
                           </div>
                         </div>
                         <div className="space-y-3">

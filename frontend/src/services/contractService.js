@@ -308,18 +308,261 @@ class ContractService {
    * @param {string} studentAddress - Adresse Ethereum de l'étudiant
    * @returns {Promise<Object>} - Les informations du diplôme
    */
-  async getDiploma(studentAddress) {
+  // Simple in-memory cache for metadata
+  metadataCache = new Map();
+  
+  // Callback for metadata updates
+  onMetadataUpdate = null;
+
+  /**
+   * Fetches and caches metadata from IPFS
+   * @private
+   */
+  async fetchAndCacheMetadata(ipfsHash, defaultTimestamp) {
+    console.log(`[${new Date().toISOString()}] Fetching metadata for IPFS hash:`, ipfsHash);
+    
+    try {
+      // Use local IPFS gateway first, fall back to public gateway
+      const localGatewayUrl = `http://localhost:8080/ipfs/${ipfsHash}`;
+      const publicGatewayUrl = `https://ipfs.io/ipfs/${ipfsHash}`;
+      
+      console.log('Trying local IPFS gateway:', localGatewayUrl);
+      
+      let response;
+      try {
+        // First try local gateway
+        response = await fetch(localGatewayUrl, { 
+          signal: AbortSignal.timeout(3000) // 3 second timeout
+        });
+        
+        if (!response.ok) {
+          console.warn(`Local gateway returned status ${response.status}, trying public gateway...`);
+          throw new Error('Local gateway failed');
+        }
+      } catch (localError) {
+        console.warn('Error with local IPFS gateway, falling back to public gateway:', localError);
+        response = await fetch(publicGatewayUrl, {
+          signal: AbortSignal.timeout(5000) // 5 second timeout for public gateway
+        });
+      }
+      
+      if (!response.ok) {
+        console.error('Error fetching metadata - HTTP status:', response.status);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const metadata = await response.json();
+      
+      // Detailed logging of the received metadata
+      console.group('=== METADATA RECEIVED ===');
+      console.log('IPFS Hash:', ipfsHash);
+      console.log('Raw metadata:', metadata);
+      console.log('Available keys:', Object.keys(metadata));
+      
+      // Check for date fields
+      const dateFields = ['issueDate', 'date', 'issuedDate', 'dateIssued', 'createdAt', 'timestamp'];
+      const foundDates = {};
+      
+      dateFields.forEach(field => {
+        if (metadata[field]) {
+          foundDates[field] = {
+            value: metadata[field],
+            type: typeof metadata[field],
+            asDate: new Date(metadata[field]),
+            timestamp: new Date(metadata[field]).getTime()
+          };
+        }
+      });
+      
+      console.log('Found date fields:', Object.keys(foundDates).length ? foundDates : 'None');
+      console.groupEnd();
+      
+      // Cache the result
+      this.metadataCache.set(ipfsHash, metadata);
+      
+      // Try to find the issue date in the metadata
+      let issueDate = null;
+      
+      // Check common date field names
+      const dateField = ['issueDate', 'date', 'issuedDate', 'dateIssued'].find(
+        field => metadata[field]
+      );
+      
+      if (dateField) {
+        const rawValue = metadata[dateField];
+        console.log('Raw date value from metadata:', rawValue, 'type:', typeof rawValue);
+        
+        let dateValue;
+        
+        // Handle number (timestamp)
+        if (typeof rawValue === 'number') {
+          console.log('Processing as timestamp (number)');
+          // Convert to milliseconds if it's in seconds
+          dateValue = new Date(rawValue * (rawValue < 1e10 ? 1000 : 1));
+        } 
+        // Handle string that might be a number (timestamp as string)
+        else if (typeof rawValue === 'string' && /^\d+$/.test(rawValue)) {
+          console.log('Processing as timestamp (string)');
+          const num = parseInt(rawValue, 10);
+          // Convert to number first, then check if it's in seconds or milliseconds
+          if (rawValue.length === 10) { // 10 digits = seconds timestamp
+            dateValue = new Date(num * 1000);
+          } else if (rawValue.length === 13) { // 13 digits = milliseconds timestamp
+            dateValue = new Date(num);
+          } else {
+            // Fallback to default behavior if length doesn't match expected timestamp formats
+            dateValue = new Date(num * (num < 1e10 ? 1000 : 1));
+          }
+        }
+        // Handle date string (YYYY-MM-DD)
+        else if (typeof rawValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+          console.log('Processing as YYYY-MM-DD date string');
+          dateValue = new Date(`${rawValue}T00:00:00.000Z`);
+        }
+        // Handle ISO date string
+        else if (typeof rawValue === 'string' && (rawValue.includes('T') || rawValue.endsWith('Z'))) {
+          console.log('Processing as ISO date string');
+          dateValue = new Date(rawValue);
+        }
+        // Fallback to default timestamp if format is unknown
+        else {
+          console.warn('Unknown date format, using default timestamp');
+          dateValue = new Date(defaultTimestamp);
+        }
+        
+        console.log('Parsed date:', {
+          dateValue: dateValue,
+          toISOString: dateValue.toISOString(),
+          toLocaleDateString: dateValue.toLocaleDateString('fr-FR', { timeZone: 'UTC' }),
+          timestamp: dateValue.getTime(),
+          isValid: !isNaN(dateValue.getTime())
+        });
+        
+        if (!isNaN(dateValue.getTime())) {
+          issueDate = dateValue;
+          console.log('Successfully parsed date:', dateValue.toISOString());
+        } else {
+          console.warn('Invalid date format in metadata. Raw value:', rawValue, 'Type:', typeof rawValue);
+          issueDate = new Date(defaultTimestamp);
+        }
+      }
+      
+      // If no valid date found, use the default
+      if (!issueDate) {
+        console.warn('No valid date found in metadata, using default');
+        issueDate = new Date(defaultTimestamp);
+      } else {
+        console.log('Using date from metadata:', issueDate);
+      }
+      
+      return { 
+        metadata,
+        issueDate
+      };
+    } catch (error) {
+      console.warn('Error fetching metadata from IPFS:', error);
+      return { 
+        metadata: null, 
+        issueDate: new Date(defaultTimestamp) 
+      };
+    }
+  }
+
+  /**
+   * Gets diploma data with optional metadata
+   * @param {string} studentAddress - The student's address
+   * @param {boolean} [skipMetadata=false] - Skip metadata fetching for faster initial load
+   * @returns {Promise<Object>} Diploma data
+   */
+  async getDiploma(studentAddress, skipMetadata = false) {
     if (!this.initialized) await this.init();
     
     try {
       const diploma = await this.contract.getDiploma(studentAddress);
-      return {
+      const ipfsHash = diploma[3];
+      const blockchainTimestamp = Number(diploma[2]) * 1000;
+      
+      // Create the basic result with blockchain data
+      const result = {
         studentName: diploma[0],
         specialization: diploma[1],
-        issueDate: new Date(Number(diploma[2]) * 1000), // Conversion timestamp en Date
-        ipfsHash: diploma[3],
-        isValid: diploma[4]
+        issueDate: new Date(blockchainTimestamp), // Default to blockchain timestamp
+        ipfsHash: ipfsHash,
+        isValid: diploma[4],
+        metadata: null
       };
+
+      // If skipping metadata or no IPFS hash, return early
+      if (skipMetadata || !ipfsHash || !ipfsHash.startsWith('Qm')) {
+        return result;
+      }
+
+      try {
+        console.group('=== PROCESSING DIPLOMA ===');
+        console.log('Student:', result.studentName);
+        console.log('Blockchain timestamp:', new Date(blockchainTimestamp).toISOString());
+        
+        // Try to get from cache first
+        if (this.metadataCache.has(ipfsHash)) {
+          console.log('Found in cache, using cached metadata');
+          const cached = this.metadataCache.get(ipfsHash);
+          result.metadata = cached;
+          
+          // Look for date in metadata
+          const dateField = ['issueDate', 'date', 'issuedDate', 'dateIssued'].find(
+            field => {
+              const hasField = !!cached[field];
+              console.log(`Checking field '${field}':`, hasField ? 'found' : 'not found');
+              return hasField;
+            }
+          );
+          
+          if (dateField) {
+            console.log(`Found date field '${dateField}':`, cached[dateField]);
+            const dateValue = new Date(cached[dateField]);
+            if (!isNaN(dateValue.getTime())) {
+              result.issueDate = dateValue;
+              console.log('Using cached date:', dateValue.toISOString());
+            } else {
+              console.warn('Invalid date value:', cached[dateField]);
+            }
+          } else {
+            console.warn('No date field found in cached metadata');
+          }
+        } else {
+          console.log('Not in cache, fetching fresh metadata...');
+          try {
+            const { metadata, issueDate } = await this.fetchAndCacheMetadata(ipfsHash, blockchainTimestamp);
+            if (metadata) {
+              result.metadata = metadata;
+              if (issueDate) {
+                console.log('Using fresh metadata date:', issueDate.toISOString());
+                result.issueDate = issueDate;
+              } else {
+                console.warn('No valid date found in fresh metadata');
+              }
+            } else {
+              console.warn('No metadata returned from fetchAndCacheMetadata');
+            }
+          } catch (fetchError) {
+            console.error('Error fetching metadata:', fetchError);
+          }
+        }
+      } catch (error) {
+        console.warn('Error processing metadata:', error);
+      }
+      
+      console.log('=== FINAL DIPLOMA DATA ===');
+      console.log('Student:', result.studentName);
+      console.log('Using date:', result.issueDate.toISOString());
+      console.log('Date source:', result.metadata ? 'metadata' : 'blockchain');
+      if (result.metadata) {
+        console.log('Metadata keys:', Object.keys(result.metadata));
+      }
+      console.log('=========================');
+      console.groupEnd();
+      
+      return result;
     } catch (error) {
       console.error("Erreur lors de la récupération du diplôme:", error);
       throw error;
