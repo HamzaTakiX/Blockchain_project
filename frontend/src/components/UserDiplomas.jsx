@@ -1,8 +1,111 @@
+import React, { useState, useEffect } from 'react';
+import { getIPFSGatewayURL } from '../services/ipfsService';
+
 const UserDiplomas = ({ 
   connectedAddress, 
   userDiplomas, 
   isLoadingUserDiplomas 
 }) => {
+  const [fileUrls, setFileUrls] = useState({});
+  const [fileNames, setFileNames] = useState({});
+
+  // Function to fetch file URL from IPFS metadata
+  const fetchFileUrl = async (ipfsHash, index) => {
+    try {
+      const response = await fetch(getIPFSGatewayURL(ipfsHash));
+      const data = await response.json();
+      
+      if (data.fileHash) {
+        const fileUrl = getIPFSGatewayURL(data.fileHash);
+        // Store the file URL and name in state
+        setFileUrls(prev => ({
+          ...prev,
+          [index]: fileUrl
+        }));
+        
+        // Extract filename from URL or use a default name
+        const fileName = data.fileName || `diploma-${index}.${data.fileType || 'pdf'}`;
+        setFileNames(prev => ({
+          ...prev,
+          [index]: fileName
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching file URL:', error);
+    }
+  };
+  
+  // Function to handle file download
+  const handleDownload = async (url, fileName, index) => {
+    if (!url) return;
+    
+    try {
+      // Show loading state
+      const downloadBtn = document.querySelector(`button[data-index="${index}"]`);
+      if (downloadBtn) {
+        downloadBtn.disabled = true;
+        const originalText = downloadBtn.innerHTML;
+        downloadBtn.innerHTML = 'Téléchargement...';
+        
+        // Fetch the file
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        // Get the blob data
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileNames[index] || 'diploma.pdf';
+        
+        // Append to body and trigger download
+        document.body.appendChild(link);
+        link.click();
+        
+        // Cleanup
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          downloadBtn.disabled = false;
+          downloadBtn.innerHTML = originalText;
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      // Fallback to direct download if fetch fails
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileNames[index] || 'diploma.pdf';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => document.body.removeChild(link), 100);
+    }
+  };
+
+  // Set up effect to fetch file URLs when diplomas change
+  useEffect(() => {
+    if (userDiplomas && userDiplomas.length > 0) {
+      userDiplomas.forEach((diploma, index) => {
+        if (diploma.ipfsHash) {
+          fetchFileUrl(diploma.ipfsHash, index);
+        }
+      });
+    }
+  }, [userDiplomas]);
+
+  // Set up effect to fetch file URLs when diplomas change
+  useEffect(() => {
+    if (userDiplomas && userDiplomas.length > 0) {
+      userDiplomas.forEach((diploma, index) => {
+        if (diploma.ipfsHash) {
+          fetchFileUrl(diploma.ipfsHash, index);
+        }
+      });
+    }
+  }, [userDiplomas]);
+
   if (!connectedAddress) return null;
 
   return (
@@ -74,42 +177,47 @@ const UserDiplomas = ({
                       </div>
                     </div>
                     
-                    <div className="flex flex-col space-y-4">
-                      <a 
-                        href={`https://ipfs.io/ipfs/${diploma.ipfsHash}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex-1 flex items-center justify-center px-4 py-3 border border-transparent rounded-xl shadow-sm text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-[1.02]"
+                    <div className="flex flex-col space-y-3 w-full">
+                      {/* Télécharger Button */}
+                      <button 
+                        data-index={index}
+                        onClick={() => fileUrls[index] && handleDownload(fileUrls[index], fileNames[index], index)}
+                        disabled={!fileUrls[index]}
+                        className={`w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-xl shadow-sm text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-[1.02] ${!fileUrls[index] ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                        Télécharger
+                        {fileUrls[index] ? 'Télécharger' : 'Chargement...'}
+                      </button>
+                      
+                      {/* Voir Button */}
+                      <a 
+                        href={fileUrls[index] || '#'}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className={`w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-xl shadow-sm text-base font-medium ${fileUrls[index] ? 'text-gray-700 bg-white hover:bg-gray-50' : 'text-gray-400 bg-gray-50 cursor-not-allowed'} transition-all duration-200`}
+                        onClick={(e) => !fileUrls[index] && e.preventDefault()}
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Voir
                       </a>
                       
-                      <div className="flex space-x-3">
-                        <a 
-                          href={`https://ipfs.io/ipfs/${diploma.ipfsHash}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          Voir
-                        </a>
-                        <button 
-                          onClick={() => window.open(`https://etherscan.io/address/${diploma.studentAddress}`, '_blank')}
-                          className="flex-1 flex items-center justify-center px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                          Etherscan
-                        </button>
-                      </div>
+                      {/* Etherscan Button */}
+                      <a 
+                        href={`https://etherscan.io/address/${diploma.studentAddress}`}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-xl shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Etherscan
+                      </a>
                     </div>
                   </div>
                 </div>

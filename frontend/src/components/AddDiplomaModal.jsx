@@ -201,12 +201,14 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
       });
       
       // Créer les métadonnées du diplôme
+      const fileURL = ipfsService.getIPFSGatewayURL(fileHash);
       const metadata = {
         studentName: formData.studentName,
         studentAddress: formData.studentAddress,
         specialization: formData.specialization,
         issueDate: formData.issueDate,
         fileHash: fileHash,
+        fileURL: fileURL,  // Add direct IPFS gateway URL for easy access
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,

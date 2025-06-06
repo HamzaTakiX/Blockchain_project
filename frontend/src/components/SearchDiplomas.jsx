@@ -1,15 +1,89 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getIPFSGatewayURL } from '../services/ipfsService';
 
 const SearchDiplomas = ({ 
-  searchAddress, 
-  setSearchAddress, 
   searchDiploma, 
   isSearching, 
   searchError, 
   diplomaFound, 
   diplomaData,
-  onClearSearch 
+  onClearSearch,
+  searchAddress,
+  setSearchAddress
 }) => {
+  const [fileUrl, setFileUrl] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+
+  // Handle file download
+  const handleDownload = async () => {
+    if (!fileUrl) return;
+    
+    try {
+      setIsLoadingFile(true);
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error('Network response was not ok');
+      
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        setIsLoadingFile(false);
+      }, 100);
+    } catch (error) {
+      console.error('Download error:', error);
+      // Fallback to direct download if fetch fails
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => document.body.removeChild(link), 100);
+      setIsLoadingFile(false);
+    }
+  };
+  
+  // Fetch file URL when diploma data is available
+  useEffect(() => {
+    const fetchFileUrl = async () => {
+      if (diplomaData?.ipfsHash) {
+        setIsLoadingFile(true);
+        try {
+          const response = await fetch(getIPFSGatewayURL(diplomaData.ipfsHash));
+          const data = await response.json();
+          if (data.fileHash) {
+            const url = getIPFSGatewayURL(data.fileHash);
+            setFileUrl(url);
+            setFileName(data.fileName || `diploma-${diplomaData.ipfsHash.substring(0, 8)}.${data.fileType || 'pdf'}`);
+          }
+        } catch (error) {
+          console.error('Error fetching file URL:', error);
+          // Fallback to direct IPFS hash if metadata fetch fails
+          const url = getIPFSGatewayURL(diplomaData.ipfsHash);
+          setFileUrl(url);
+          setFileName(`diploma-${diplomaData.ipfsHash.substring(0, 8)}.pdf`);
+        } finally {
+          setIsLoadingFile(false);
+        }
+      }
+    };
+
+    if (diplomaFound) {
+      fetchFileUrl();
+    } else {
+      setFileUrl('');
+      setFileName('');
+    }
+  }, [diplomaData, diplomaFound]);
   return (
     <div id="search-section" className="bg-white shadow-lg rounded-lg p-6 mb-8">
       <div className="text-center mb-8">
@@ -161,28 +235,35 @@ const SearchDiplomas = ({
               
               <div className="space-y-3">
                 <a 
-                  href={`https://ipfs.io/ipfs/${diplomaData.ipfsHash}`} 
+                  href={fileUrl || '#'} 
                   target="_blank" 
                   rel="noopener noreferrer" 
-                  className="w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                  className={`w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 ${
+                    !fileUrl ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  onClick={(e) => !fileUrl && e.preventDefault()}
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
-                  Voir le document complet
+                  {fileUrl ? 'Voir le document complet' : 'Chargement...'}
                 </a>
                 
-                <a 
-                  href={`https://ipfs.io/ipfs/${diplomaData.ipfsHash}`} 
-                  download
-                  className="w-full flex items-center justify-center px-6 py-3 border border-gray-300 rounded-lg shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                <button 
+                  onClick={handleDownload}
+                  disabled={!fileUrl || isLoadingFile}
+                  className={`w-full flex items-center justify-center px-6 py-3 border border-gray-300 rounded-lg shadow-sm text-base font-medium ${
+                    !fileUrl || isLoadingFile 
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300`}
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Télécharger le PDF
-                </a>
+                  {isLoadingFile ? 'Téléchargement...' : 'Télécharger'}
+                </button>
               </div>
             </div>
           </div>

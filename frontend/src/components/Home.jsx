@@ -4,6 +4,7 @@ import AddDiplomaModal from './AddDiplomaModal';
 import SearchDiplomas from './SearchDiplomas';
 import UserDiplomas from './UserDiplomas';
 
+
 const Home = () => {
   const [totalDiplomas, setTotalDiplomas] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
