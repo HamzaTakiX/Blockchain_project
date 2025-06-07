@@ -3,7 +3,7 @@ import ipfsService from '../services/ipfsService';
 import contractService from '../services/contractService';
 import '../App.css';
 
-const AddDiplomaModal = ({ isOpen, onClose }) => {
+const AddDiplomaModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     studentName: '',
     studentAddress: '',
@@ -19,25 +19,42 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
 
-  // Charger les adresses existantes quand le modal s'ouvre
+  // Fonction pour réinitialiser complètement le formulaire
+  const resetForm = () => {
+    setFormData({
+      studentName: '',
+      studentAddress: '',
+      specialization: '',
+      issueDate: ''
+    });
+    setFile(null);
+    setMessage({ type: '', content: '' });
+    setIsAddressVerified(false);
+    setShowAddressDropdown(false);
+  };
+
+  // Réinitialiser le formulaire quand le modal s'ouvre
   useEffect(() => {
     if (isOpen) {
+      resetForm();
       fetchExistingAddresses();
     }
     
-    // Ajouter un gestionnaire pour les changements de compte
+    // Nettoyage des écouteurs d'événements
+    const handleAccountsChanged = () => {
+      console.log('AddDiplomaModal - Account changed, refreshing page...');
+      window.location.reload();
+    };
+    
     if (window.ethereum) {
-      const handleAccountsChanged = () => {
-        console.log('AddDiplomaModal - Account changed, refreshing page...');
-        window.location.reload();
-      };
-      
       window.ethereum.on('accountsChanged', handleAccountsChanged);
-      
-      return () => {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-      };
     }
+    
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
   }, [isOpen]);
   
   // Récupérer les adresses existantes depuis la blockchain
@@ -111,10 +128,13 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
   
   // Vérifie si un diplôme existe déjà pour cette adresse d'étudiant
   const verifyStudentAddress = async () => {
+    // Clear any existing messages
+    setMessage({ type: '', content: '' });
+    
     if (!formData.studentAddress) {
       setMessage({
         type: 'error',
-        content: "Veuillez entrer l'adresse Ethereum de l'étudiant"
+        content: '❌ Veuillez entrer une adresse Ethereum valide.'
       });
       return;
     }
@@ -123,13 +143,13 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
     if (!formData.studentAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
       setMessage({
         type: 'error',
-        content: "L'adresse Ethereum n'est pas valide."
+        content: '❌ Format d\'adresse invalide. Une adresse Ethereum doit commencer par 0x et contenir 40 caractères hexadécimaux.'
       });
       return;
     }
     
     setIsVerifying(true);
-    setMessage({ type: 'info', content: 'Vérification de l\'adresse...' });
+    setMessage({ type: 'info', content: '⏳ Vérification en cours...' });
     
     try {
       // Vérifier si un diplôme existe déjà pour cette adresse
@@ -138,13 +158,13 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
       if (exists) {
         setMessage({
           type: 'error',
-          content: `Un diplôme existe déjà pour l'adresse ${formData.studentAddress}. Veuillez utiliser une autre adresse.`
+          content: '❌ Un diplôme existe déjà pour cette adresse. Veuillez utiliser une autre adresse.'
         });
         setIsAddressVerified(false);
       } else {
         setMessage({
           type: 'success',
-          content: `L'adresse ${formData.studentAddress} est disponible pour un nouveau diplôme.`
+          content: '✅ Adresse vérifiée avec succès. Vous pouvez continuer.'
         });
         setIsAddressVerified(true);
       }
@@ -332,16 +352,18 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
       });
       setFile(null);
       
-      // Afficher un message de succès
-      setMessage({
-        type: 'success',
-        content: 'Le diplôme a été ajouté avec succès !'
-      });
+      // Call the success callback with the new diploma data
+      if (onSuccess) {
+        onSuccess({
+          studentName: formData.studentName,
+          studentAddress: formData.studentAddress,
+          specialization: formData.specialization,
+          issueDate: formData.issueDate
+        });
+      }
       
-      // Fermer le modal après un court délai en cas de succès
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+      // Fermer le modal immédiatement
+      onClose();
     } catch (error) {
       console.error('Erreur lors de l\'ajout du diplôme:', error);
       
@@ -409,9 +431,30 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
           zIndex: 2,
           width: '100%',
           maxWidth: '42rem',
-          maxHeight: '90vh'
+          maxHeight: '90vh',
+          '--scrollbar-thumb': '#3b82f6',
+          '--scrollbar-track': '#f3f4f6',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--scrollbar-thumb) var(--scrollbar-track)'
         }}
       >
+        <style jsx global>{`
+          .modal-scroll::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+          }
+          .modal-scroll::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+            border-radius: 4px;
+          }
+          .modal-scroll::-webkit-scrollbar-thumb {
+            background-color: var(--scrollbar-thumb);
+            border-radius: 4px;
+          }
+          .modal-scroll::-webkit-scrollbar-thumb:hover {
+            background-color: #2563eb;
+          }
+        `}</style>
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">Ajouter un Diplôme</h2>
@@ -427,7 +470,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
         </div>
         
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1 modal-scroll">
           {/* Message Alert */}
           {message.content && (
             <div className={`mb-6 p-4 rounded-lg ${
@@ -443,11 +486,11 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                     </svg>
                   ) : message.type === 'info' ? (
                     <svg className="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h2a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM9 11H7a2 2 0 00-2 2v3a2 2 0 110 4h3a2 2 0 112 2v3h2a2 2 0 110 4h-2v-4h-3a2 2 0 01-2-2V13a2 2 0 012-2h2V9a2 2 0 012-2h2a2 2 0 012 2v2h2a2 2 0 010 4h-2v2h-3a2 2 0 01-2 2H9z" clipRule="evenodd" />
                     </svg>
                   ) : (
                     <svg className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9H5a2 2 0 00-2 2v6a2 2 0 110 4h14a2 2 0 110-4v-6a2 2 0 00-2-2h-2v2H7V9z" clipRule="evenodd" />
                     </svg>
                   )}
                 </div>
@@ -461,7 +504,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
           <form onSubmit={handleSubmit} className="space-y-6">
           {/* Student Name */}
           <div>
-            <label htmlFor="studentName" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label htmlFor="studentName" className="block text-sm font-medium text-gray-700 mb-1.5 text-left">
               Nom de l'étudiant
             </label>
             <div className="flex space-x-2">
@@ -470,6 +513,10 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                   type="text"
                   id="studentName"
                   name="studentName"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck="false"
                   value={formData.studentName}
                   onChange={handleChange}
                   className={`w-full px-4 py-2.5 text-sm text-gray-800 bg-white border ${
@@ -492,7 +539,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
             
             {/* Ethereum Address */}
             <div>
-              <label htmlFor="studentAddress" className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label htmlFor="studentAddress" className="block text-sm font-medium text-gray-700 mb-1.5 text-left">
                 Adresse Ethereum de l'étudiant
               </label>
               <div className="flex space-x-2">
@@ -501,6 +548,10 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                     type="text"
                     id="studentAddress"
                     name="studentAddress"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck="false"
                     value={formData.studentAddress}
                     onChange={handleChange}
                     onClick={() => setShowAddressDropdown(true)}
@@ -563,7 +614,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                   type="button"
                   onClick={verifyStudentAddress}
                   disabled={isVerifying || !formData.studentAddress}
-                  className="px-4 py-2.5 text-sm font-medium rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
+                  className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   {isVerifying ? 'Vérification...' : 'Vérifier'}
                 </button>
@@ -577,7 +628,7 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
             
               {/* Specialization */}
               <div>
-                <label htmlFor="specialization" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="specialization" className="block text-sm font-medium text-gray-700 mb-1.5 text-left">
                   Spécialité
                 </label>
                 <div className="flex space-x-2">
@@ -586,6 +637,10 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                       type="text"
                       id="specialization"
                       name="specialization"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck="false"
                       value={formData.specialization}
                       onChange={handleChange}
                       className={`w-full px-4 py-2.5 text-sm text-gray-800 bg-white border ${
@@ -608,13 +663,14 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
             
             {/* Issue Date */}
             <div className="mb-4">
-              <label htmlFor="issueDate" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="issueDate" className="block text-sm font-medium text-gray-700 mb-1.5 text-left">
                 Date d'émission <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
                 id="issueDate"
                 name="issueDate"
+                autoComplete="off"
                 value={formData.issueDate}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
@@ -634,26 +690,28 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
             
             {/* File Upload */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 text-left">
                 Fichier du Certificat
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
+              <div className="mt-1 px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
                 <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
+                  <div className="flex justify-center">
+                    <svg
+                      className="h-12 w-12 text-gray-400"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col items-center text-sm text-gray-600">
                     <label
                       htmlFor="certificateFile"
                       className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
@@ -669,7 +727,9 @@ const AddDiplomaModal = ({ isOpen, onClose }) => {
                         required
                       />
                     </label>
-                    <p className="pl-1">ou glisser-déposer</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      ou glisser-déposer
+                    </p>
                   </div>
                   <p className="text-xs text-gray-500">
                     PDF, JPG ou PNG jusqu'à 10MB

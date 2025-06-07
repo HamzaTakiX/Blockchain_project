@@ -19,6 +19,8 @@ const Home = () => {
   const [userDiplomas, setUserDiplomas] = useState([]);
   const [isLoadingUserDiplomas, setIsLoadingUserDiplomas] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [newDiplomaData, setNewDiplomaData] = useState(null);
 
   // Fonction pour rechercher un diplôme par adresse Ethereum
   const searchDiploma = async () => {
@@ -494,7 +496,124 @@ const Home = () => {
           <AddDiplomaModal 
             isOpen={isAddModalOpen} 
             onClose={() => setIsAddModalOpen(false)} 
+            onSuccess={(diplomaData) => {
+              setNewDiplomaData(diplomaData);
+              setShowSuccessModal(true);
+            }}
           />
+          
+          {/* Success Notification Modal */}
+          {showSuccessModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all duration-300 scale-95 hover:scale-100">
+                {/* Header */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-600 opacity-90"></div>
+                  <div className="relative z-10 p-6 flex items-center">
+                    <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm">
+                      <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <h3 className="text-xl font-bold text-white">Succès</h3>
+                      <p className="text-green-100">Diplôme enregistré avec succès</p>
+                    </div>
+                    <button 
+                      onClick={() => setShowSuccessModal(false)}
+                      className="ml-auto text-white/80 hover:text-white transition-colors p-1 -mr-2"
+                      aria-label="Fermer"
+                    >
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Content */}
+                <div className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-500">Étudiant</p>
+                        <p className="text-sm font-semibold text-gray-900">{newDiplomaData?.studentName || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-500 text-left">Adresse</p>
+                        <p className="text-sm font-mono text-gray-900 break-all text-left">{newDiplomaData?.studentAddress || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-500">Spécialisation</p>
+                        <p className="text-sm font-semibold text-gray-900">{newDiplomaData?.specialization || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-500">Date d'émission</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {newDiplomaData?.issueDate ? new Date(newDiplomaData.issueDate).toLocaleDateString('fr-FR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          }) : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 flex justify-end space-x-3">
+                    <button
+                      onClick={() => setShowSuccessModal(false)}
+                      className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors duration-200"
+                    >
+                      Fermer
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowSuccessModal(false);
+                        // Scroll to search section
+                        document.getElementById('search-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors duration-200 flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                      </svg>
+                      Vérifier
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="absolute -bottom-16 -right-16 w-64 h-64 bg-blue-500 rounded-full opacity-20"></div>
